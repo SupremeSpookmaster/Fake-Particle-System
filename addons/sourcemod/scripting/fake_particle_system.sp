@@ -250,6 +250,7 @@ public Native_FPS_SpawnFakeParticle(Handle plugin, int numParams)
 		AcceptEntityInput(FakeParticle, "SetAnimation");
 		DispatchKeyValueFloat(FakeParticle, "playbackrate", rate);
 		
+		SetEntityRenderMode(FakeParticle, RENDER_TRANSALPHA);
 		SetEntityRenderColor(FakeParticle, r, g, b, alpha);
 		SetEntPropFloat(FakeParticle, Prop_Send, "m_flModelScale", scale); 
 		
@@ -290,21 +291,20 @@ public Native_FPS_AttachFakeParticleToEntity(Handle plugin, int numParams)
 	GetNativeArray(13, posOffset, sizeof(posOffset));
 	GetNativeArray(14, angOffset, sizeof(angOffset));
 	
-	int FakeParticle = FPS_SpawnFakeParticle(OFF_THE_MAP, NULL_VECTOR, particle, skin, sequence, rate, duration, r, g, b, alpha, scale);
+	float pos[3], ang[3];
+	if (HasEntProp(entity, Prop_Data, "m_vecAbsOrigin"))
+	{
+		GetEntPropVector(entity, Prop_Data, "m_vecAbsOrigin", pos);
+	}
+	else if (HasEntProp(entity, Prop_Send, "m_vecOrigin"))
+	{
+		GetEntPropVector(entity, Prop_Send, "m_vecOrigin", pos);
+	}
+	GetClientAbsAngles(entity, ang);
+	
+	int FakeParticle = FPS_SpawnFakeParticle(pos, ang, particle, skin, sequence, rate, duration, r, g, b, alpha, scale);
 	if (IsValidEntity(FakeParticle))
 	{
-		float pos[3], ang[3];
-		if (HasEntProp(entity, Prop_Data, "m_vecAbsOrigin"))
-		{
-			GetEntPropVector(entity, Prop_Data, "m_vecAbsOrigin", pos);
-		}
-		else if (HasEntProp(entity, Prop_Send, "m_vecOrigin"))
-		{
-			GetEntPropVector(entity, Prop_Send, "m_vecOrigin", pos);
-		}
-		
-		TeleportEntity(FakeParticle, pos, NULL_VECTOR, NULL_VECTOR);
-	
 		SetVariantString("!activator");
 		AcceptEntityInput(FakeParticle, "SetParent", entity, FakeParticle);
 		SetVariantString(point);
@@ -321,6 +321,9 @@ public Native_FPS_AttachFakeParticleToEntity(Handle plugin, int numParams)
 		}
 		
 		TeleportEntity(FakeParticle, pos, ang, NULL_VECTOR);
+		
+		DispatchSpawn(FakeParticle);
+		ActivateEntity(FakeParticle);
 		
 		return FakeParticle;
 	}

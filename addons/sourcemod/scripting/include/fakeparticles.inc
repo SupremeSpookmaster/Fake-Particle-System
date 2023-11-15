@@ -23,7 +23,8 @@ enum struct FakeParticleEffect
 	{
 		this.EntIndex = newIndex;
 		this.Type = newType;
-		this.BillboardTarget = GetClientUserId(target);
+		if (IsValidClient(target))
+			this.BillboardTarget = GetClientUserId(target);
 		
 		if (this.Type == FPS_ParticleType_Billboard)
 		{
@@ -51,6 +52,7 @@ enum struct FakeParticleEffect
 	}
 }
 
+//TODO: Rename this to just FPE_Transmit and block fake particles from being transmitted if they are parented to the client and the client is in first person
 public Action FPE_BillboardTransmit(int entity, int client)
 {
  	SetEdictFlags(entity, GetEdictFlags(entity)&(~FL_EDICT_ALWAYS));
