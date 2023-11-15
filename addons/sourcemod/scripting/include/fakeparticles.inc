@@ -3,6 +3,12 @@
 #endif
 #define _fps_included_
 
+enum FPS_ParticleType
+{
+	FPS_ParticleType_Normal = 0,
+	FPS_ParticleType_Billboard
+};
+
 /**
  * Spawns a model at the given coordinates. Intended to be used to spawn fake particle effects.
  *

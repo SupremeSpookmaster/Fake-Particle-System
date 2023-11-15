@@ -34,7 +34,10 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 }
 
 ////////////////////////////////////////////////////////////////////////
-//		TODO: Various ideas for forwards and natives:
+//		TODO: Various ideas for features:
+//
+//		FPS_ParticleType: Comes with FPS_ParticleType_Normal, which is just a normal model, and FPS_ParticleType_Billboard, which displays a unique model to each player which is always facing that player. Billboard is WAY more expensive and should be used sparingly.
+//				- Billboard will use its own spawning native which will return a list of all entity indexes which were spawned.
 //
 //		FPS_OnFakeParticleCreated(char particle[255], float pos[3], float ang[3], float scale, int r, int g, int b, int alpha, int skin): 
 //				- Called when a FPE is created.
