@@ -24,14 +24,23 @@ public Plugin myinfo =
 #include <sdkhooks>
 #include <entity>
 #include <cfgmap>
-#include <dhooks>
-#include <collisionhook>
+
+float OFF_THE_MAP[3] = {1182792704.0, 1182792704.0, -964690944.0};
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
 	FPS_MakeNatives();
 	return APLRes_Success;
 }
+
+////////////////////////////////////////////////////////////////////////
+//		TODO: Various ideas for forwards and natives:
+//
+//		FPS_OnFakeParticleCreated(char particle[255], float pos[3], float ang[3], float scale, int r, int g, int b, int alpha, int skin): 
+//				- Called when a FPE is created.
+//		FPS_OnFakeParticleRemoved(char particle[255], float pos[3], float ang[3], float scale, int r, int g, int b, int alpha, int skin):
+//				- Called when a FPE is removed.
+////////////////////////////////////////////////////////////////////////
 
 public void OnPluginStart()
 {
@@ -43,6 +52,9 @@ public void OnPluginStart()
 public void FPS_MakeNatives()
 {
 	RegPluginLibrary("fake_particle_system");
+	
+	CreateNative("FPS_SpawnFakeParticle", Native_FPS_SpawnFakeParticle);
+	CreateNative("FPS_AttachFakeParticleToEntity", Native_FPS_AttachFakeParticleToEntity);
 }
 
 public void FPS_MakeForwards()
@@ -204,6 +216,120 @@ public void OnEntityDestroyed(int entity)
 	}
 }
 
+public Native_FPS_SpawnFakeParticle(Handle plugin, int numParams)
+{
+	float pos[3], ang[3];
+	char particle[255], sequence[255];
+	GetNativeArray(1, pos, sizeof(pos));
+	GetNativeArray(2, ang, sizeof(ang));
+	
+	GetNativeString(3, particle, sizeof(particle));
+	int skin = GetNativeCell(4);
+	GetNativeString(5, sequence, sizeof(sequence));
+	float rate = GetNativeCell(6);
+	float duration = GetNativeCell(7);
+	int r = GetNativeCell(8);
+	int g = GetNativeCell(9);
+	int b = GetNativeCell(10);
+	int alpha = GetNativeCell(11);
+	float scale = GetNativeCell(12);
+	
+	int FakeParticle = CreateEntityByName("prop_dynamic_override");
+	if (IsValidEntity(FakeParticle))
+	{
+		TeleportEntity(FakeParticle, pos, ang, NULL_VECTOR);
+	
+		char skinChar[16];
+		Format(skinChar, sizeof(skinChar), "%i", skin);
+	
+		DispatchKeyValue(FakeParticle, "skin", skinChar);
+		DispatchKeyValue(FakeParticle, "model", particle);	
+		
+		DispatchKeyValueVector(FakeParticle, "angles", ang);
+		
+		DispatchSpawn(FakeParticle);
+		ActivateEntity(FakeParticle);
+		
+		SetVariantString(sequence);
+		AcceptEntityInput(FakeParticle, "SetAnimation");
+		DispatchKeyValueFloat(FakeParticle, "playbackrate", rate);
+		
+		SetEntityRenderColor(FakeParticle, r, g, b, alpha);
+		SetEntPropFloat(FakeParticle, Prop_Send, "m_flModelScale", scale); 
+		
+		if (duration > 0.0)
+		{
+			CreateTimer(duration, Timer_RemoveEntity, EntIndexToEntRef(FakeParticle), TIMER_FLAG_NO_MAPCHANGE);
+		}
+		
+		//TODO: Use RequestFrame to call FPS_OnFakeParticleCreated on the next frame.
+		
+		return FakeParticle;
+	}
+	
+	return -1;
+}
+
+public Native_FPS_AttachFakeParticleToEntity(Handle plugin, int numParams)
+{
+	int entity = GetNativeCell(1);
+	
+	float posOffset[3], angOffset[3];
+	char particle[255], sequence[255], point[255];
+	GetNativeString(2, point, sizeof(point));
+	
+	GetNativeString(3, particle, sizeof(particle));
+	int skin = GetNativeCell(4);
+	GetNativeString(5, sequence, sizeof(sequence));
+	float rate = GetNativeCell(6);
+	float duration = GetNativeCell(7);
+	int r = GetNativeCell(8);
+	int g = GetNativeCell(9);
+	int b = GetNativeCell(10);
+	int alpha = GetNativeCell(11);
+	float scale = GetNativeCell(12);
+	
+	GetNativeArray(13, posOffset, sizeof(posOffset));
+	GetNativeArray(14, angOffset, sizeof(angOffset));
+	
+	int FakeParticle = FPS_SpawnFakeParticle(OFF_THE_MAP, NULL_VECTOR, particle, skin, sequence, rate, duration, r, g, b, alpha, scale);
+	if (IsValidEntity(FakeParticle))
+	{
+		float pos[3], ang[3];
+		if (HasEntProp(entity, Prop_Data, "m_vecAbsOrigin"))
+		{
+			GetEntPropVector(entity, Prop_Data, "m_vecAbsOrigin", pos);
+		}
+		else if (HasEntProp(entity, Prop_Send, "m_vecOrigin"))
+		{
+			GetEntPropVector(entity, Prop_Send, "m_vecOrigin", pos);
+		}
+		
+		TeleportEntity(FakeParticle, pos, NULL_VECTOR, NULL_VECTOR);
+	
+		SetVariantString("!activator");
+		AcceptEntityInput(FakeParticle, "SetParent", entity, FakeParticle);
+		SetVariantString(point);
+		AcceptEntityInput(FakeParticle, "SetParentAttachmentMaintainOffset", FakeParticle, FakeParticle);
+		DispatchKeyValue(FakeParticle, "targetname", "present");
+		
+		GetEntPropVector(FakeParticle, Prop_Send, "m_vecOrigin", pos);
+		GetEntPropVector(FakeParticle, Prop_Send, "m_angRotation", ang);
+		
+		for (int i = 0; i < 3; i++)
+		{
+			pos[i] += posOffset[i];
+			ang[i] += angOffset[i];
+		}
+		
+		TeleportEntity(FakeParticle, pos, ang, NULL_VECTOR);
+		
+		return FakeParticle;
+	}
+	
+	return -1;
+}
+
 //Stocks and such, move these to a file like fps_stocks or something before publishing:
 
 /**
@@ -310,4 +436,16 @@ stock bool CheckFile(char path[255])
 	}
 	
 	return exists;
+}
+
+public Action Timer_RemoveEntity(Handle Timer_RemoveEntity, int entityId)
+{
+	int entity = EntRefToEntIndex(entityId);
+	if (IsValidEntity(entity) && entity > MaxClients)
+	{
+		TeleportEntity(entity, OFF_THE_MAP, NULL_VECTOR, NULL_VECTOR);
+		AcceptEntityInput(entity, "Kill");
+		RemoveEntity(entity);
+	}
+	return Plugin_Continue;
 }
