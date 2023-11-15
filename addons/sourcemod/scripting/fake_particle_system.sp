@@ -30,81 +30,11 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 ////////////////////////////////////////////////////////////////////////
 //		TODO: Various ideas for features:
 //
-//		FPS_ParticleType: Comes with FPS_ParticleType_Normal, which is just a normal model, and FPS_ParticleType_Billboard, which displays a unique model to each player which is always facing that player. Billboard is WAY more expensive and should be used sparingly.
-//				- Billboard will use its own spawning native which will return a list of all entity indexes which were spawned.
-//
 //		FPS_OnFakeParticleCreated(char particle[255], float pos[3], float ang[3], float scale, int r, int g, int b, int alpha, int skin): 
 //				- Called when a FPE is created.
 //		FPS_OnFakeParticleRemoved(char particle[255], float pos[3], float ang[3], float scale, int r, int g, int b, int alpha, int skin):
 //				- Called when a FPE is removed.
 ////////////////////////////////////////////////////////////////////////
-
-FakeParticleEffect ActiveEffects[2049];
-
-enum struct FakeParticleEffect
-{
-	int EntIndex;
-	int BillboardTarget;
-	
-	FPS_ParticleType Type;
-	
-	void Create(int newIndex, FPS_ParticleType newType, int target = 0)
-	{
-		this.EntIndex = newIndex;
-		this.Type = newType;
-		this.BillboardTarget = GetClientUserId(target);
-		
-		if (this.Type == FPS_ParticleType_Billboard)
-		{
-			SetEdictFlags(this.EntIndex, GetEdictFlags(this.EntIndex)&(~FL_EDICT_ALWAYS));
-			SDKHook(this.EntIndex, SDKHook_SetTransmit, FPE_BillboardTransmit);
-		}
-	}
-	
-	void Remove()
-	{
-		if (IsValidEntity(this.EntIndex))
-		{
-			RemoveEntity(this.EntIndex);
-		}
-		
-		this.Delete();
-	}
-	
-	void Delete()
-	{
-		this.EntIndex = -1;
-		this.BillboardTarget = -1;
-		this.Type = FPS_ParticleType_None;
-	}
-}
-
-public Action FPE_BillboardTransmit(int entity, int client)
-{
- 	SetEdictFlags(entity, GetEdictFlags(entity)&(~FL_EDICT_ALWAYS));
- 	
- 	int target = GetClientOfUserId(ActiveEffects[entity].BillboardTarget);
- 	if (client != target)
- 	{
- 		return Plugin_Handled;
- 	}
- 	
- 	//Orient the entity to always face directly at the target's eyes:
-	float ang[3], pos[3], eyePos[3], DummyAngles[3], fVecFinal[3], fFinalPos[3];
-	GetClientEyePosition(target, eyePos);
-	GetClientEyeAngles(target, DummyAngles);
-	GetEntPropVector(entity, Prop_Send, "m_vecOrigin", pos);
-	GetEntPropVector(entity, Prop_Send, "m_angRotation", ang);	
-	
-	AddInFrontOf(eyePos, DummyAngles, 7.0, fVecFinal);
-	MakeVectorFromPoints(pos, fVecFinal, fFinalPos);
-
-	GetVectorAngles(fFinalPos, ang);
- 	
- 	TeleportEntity(entity, NULL_VECTOR, ang, NULL_VECTOR);
- 	
- 	return Plugin_Continue;
-}
 
 public void OnPluginStart()
 {

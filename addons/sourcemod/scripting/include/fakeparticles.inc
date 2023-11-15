@@ -10,6 +10,74 @@ enum FPS_ParticleType
 	FPS_ParticleType_Billboard
 };
 
+FakeParticleEffect ActiveEffects[2049];
+
+enum struct FakeParticleEffect
+{
+	int EntIndex;
+	int BillboardTarget;
+	
+	FPS_ParticleType Type;
+	
+	void Create(int newIndex, FPS_ParticleType newType, int target = 0)
+	{
+		this.EntIndex = newIndex;
+		this.Type = newType;
+		this.BillboardTarget = GetClientUserId(target);
+		
+		if (this.Type == FPS_ParticleType_Billboard)
+		{
+			SetEdictFlags(this.EntIndex, GetEdictFlags(this.EntIndex)&(~FL_EDICT_ALWAYS));
+			SDKHook(this.EntIndex, SDKHook_SetTransmit, FPE_BillboardTransmit);
+		}
+	}
+	
+	void Remove()
+	{
+		if (IsValidEntity(this.EntIndex))
+		{
+			RemoveEntity(this.EntIndex);
+		}
+		
+		this.Delete();
+	}
+	
+	void Delete()
+	{
+		this.EntIndex = -1;
+		this.BillboardTarget = -1;
+		this.Type = FPS_ParticleType_None;
+		//TODO: Call FPS_OnFakeParticleRemoved
+	}
+}
+
+public Action FPE_BillboardTransmit(int entity, int client)
+{
+ 	SetEdictFlags(entity, GetEdictFlags(entity)&(~FL_EDICT_ALWAYS));
+ 	
+ 	int target = GetClientOfUserId(ActiveEffects[entity].BillboardTarget);
+ 	if (client != target)
+ 	{
+ 		return Plugin_Handled;
+ 	}
+ 	
+ 	//Orient the entity to always face directly at the target's eyes:
+	float ang[3], pos[3], eyePos[3], DummyAngles[3], fVecFinal[3], fFinalPos[3];
+	GetClientEyePosition(target, eyePos);
+	GetClientEyeAngles(target, DummyAngles);
+	GetEntPropVector(entity, Prop_Send, "m_vecOrigin", pos);
+	GetEntPropVector(entity, Prop_Send, "m_angRotation", ang);	
+	
+	AddInFrontOf(eyePos, DummyAngles, 7.0, fVecFinal);
+	MakeVectorFromPoints(pos, fVecFinal, fFinalPos);
+
+	GetVectorAngles(fFinalPos, ang);
+ 	
+ 	TeleportEntity(entity, NULL_VECTOR, ang, NULL_VECTOR);
+ 	
+ 	return Plugin_Continue;
+}
+
 /**
  * Spawns a model at the given coordinates. Intended to be used to spawn fake particle effects.
  *
@@ -71,7 +139,7 @@ native int FPS_AttachFakeParticleToEntity(int entity, char point[255], char part
  * @param alpha		Optional render color parameter for the fake particle effect to use, alpha value, 0-255.
  * @param scale		Optional model scale for the fake particle effect.
  *
- * @return An array containing the entity references of every model spawned by this method.
+ * @return An array handle containing the entity references of every model spawned by this method. DELETE THIS HANDLE WHEN YOU ARE DONE WITH IT, EVEN IF YOU DO NOT USE IT AT ALL!
  * @error  The model passed to the ''particle'' parameter does not exist.
  */
 native Handle FPS_SpawnBillboardParticle(float pos[3], char particle[255], int skin, char sequence[255] = "ref", float rate = 1.0, float duration = 0.0, int r = 255, int g = 255, int b = 255, int alpha = 255, float scale = 1.0);
@@ -93,7 +161,7 @@ native Handle FPS_SpawnBillboardParticle(float pos[3], char particle[255], int s
  * @param scale		Optional model scale for the fake particle effect.
  * @param posOffset	Optional positional offset.
  *
- * @return An array containing the entity references of every model spawned by this method.
+ * @return An array handle containing the entity references of every model spawned by this method. DELETE THIS HANDLE WHEN YOU ARE DONE WITH IT, EVEN IF YOU DO NOT USE IT AT ALL!
  * @error  Invalid entity index passed to the ''entity'' parameter, or the model passed to the ''particle'' parameter does not exist. 
  */
 native Handle FPS_AttachBillboardParticleToEntity(int entity, char point[255], char particle[255], int skin, char sequence[255] = "ref", float rate = 1.0, float duration = 0.0, int r = 255, int g = 255, int b = 255, int alpha = 255, float scale = 1.0, float posOffset[3] = NULL_VECTOR);
