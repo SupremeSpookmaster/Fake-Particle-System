@@ -19,13 +19,7 @@ public Plugin myinfo =
 };
 
 #include <fakeparticles>
-#include <sourcemod>
-#include <sdktools>
-#include <sdkhooks>
-#include <entity>
-#include <cfgmap>
-
-float OFF_THE_MAP[3] = {1182792704.0, 1182792704.0, -964690944.0};
+#include <fps_stocks>
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
@@ -45,6 +39,73 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 //				- Called when a FPE is removed.
 ////////////////////////////////////////////////////////////////////////
 
+FakeParticleEffect ActiveEffects[2049];
+
+enum struct FakeParticleEffect
+{
+	int EntIndex;
+	int BillboardTarget;
+	
+	FPS_ParticleType Type;
+	
+	void Create(int newIndex, FPS_ParticleType newType, int target = 0)
+	{
+		this.EntIndex = newIndex;
+		this.Type = newType;
+		this.BillboardTarget = GetClientUserId(target);
+		
+		if (this.Type == FPS_ParticleType_Billboard)
+		{
+			SetEdictFlags(this.EntIndex, GetEdictFlags(this.EntIndex)&(~FL_EDICT_ALWAYS));
+			SDKHook(this.EntIndex, SDKHook_SetTransmit, FPE_BillboardTransmit);
+		}
+	}
+	
+	void Remove()
+	{
+		if (IsValidEntity(this.EntIndex))
+		{
+			RemoveEntity(this.EntIndex);
+		}
+		
+		this.Delete();
+	}
+	
+	void Delete()
+	{
+		this.EntIndex = -1;
+		this.BillboardTarget = -1;
+		this.Type = FPS_ParticleType_None;
+	}
+}
+
+public Action FPE_BillboardTransmit(int entity, int client)
+{
+ 	SetEdictFlags(entity, GetEdictFlags(entity)&(~FL_EDICT_ALWAYS));
+ 	
+ 	int target = GetClientOfUserId(ActiveEffects[entity].BillboardTarget);
+ 	if (client != target)
+ 	{
+ 		return Plugin_Handled;
+ 	}
+ 	
+ 	//Orient the entity to always face directly at the target's eyes:
+	float ang[3], pos[3], eyePos[3], DummyAngles[3], fVecFinal[3], fFinalPos[3];
+	GetClientEyePosition(target, eyePos);
+	GetClientEyeAngles(target, DummyAngles);
+	GetEntPropVector(entity, Prop_Send, "m_vecOrigin", pos);
+	GetEntPropVector(entity, Prop_Send, "m_angRotation", ang);	
+	
+	AddInFrontOf(eyePos, DummyAngles, 7.0, fVecFinal);
+	MakeVectorFromPoints(pos, fVecFinal, fFinalPos);
+
+	GetVectorAngles(fFinalPos, ang);
+ 	
+ 	TeleportEntity(entity, NULL_VECTOR, ang, NULL_VECTOR);
+ 	
+ 	return Plugin_Continue;
+}
+
 public void OnPluginStart()
 {
 	//RegAdminCmd("pnpc_reload", PNPC_ReloadNPCs, ADMFLAG_KICK, "Portable NPC System: Reloads the list of enabled PNPCs.");
@@ -58,6 +119,8 @@ public void FPS_MakeNatives()
 	
 	CreateNative("FPS_SpawnFakeParticle", Native_FPS_SpawnFakeParticle);
 	CreateNative("FPS_AttachFakeParticleToEntity", Native_FPS_AttachFakeParticleToEntity);
+	CreateNative("FPS_SpawnBillboardParticle", Native_FPS_SpawnBillboardParticle);
+	CreateNative("FPS_AttachBillboardParticleToEntity", Native_FPS_AttachBillboardParticleToEntity);
 }
 
 public void FPS_MakeForwards()
@@ -215,7 +278,7 @@ public void OnEntityDestroyed(int entity)
 {
 	if (entity >= 0 && entity < 2049)
 	{
-		//TODO: This plugin is inevitably going to end up having some global variables tied to fake particles, clean them up here.
+		ActiveEffects[entity].Delete();
 	}
 }
 
@@ -266,6 +329,8 @@ public Native_FPS_SpawnFakeParticle(Handle plugin, int numParams)
 		}
 		
 		//TODO: Use RequestFrame to call FPS_OnFakeParticleCreated on the next frame.
+		
+		ActiveEffects[FakeParticle].Create(FakeParticle, FPS_ParticleType_Normal);
 		
 		return FakeParticle;
 	}
@@ -333,122 +398,124 @@ public Native_FPS_AttachFakeParticleToEntity(Handle plugin, int numParams)
 	return -1;
 }
 
-//Stocks and such, move these to a file like fps_stocks or something before publishing:
-
-/**
- * Checks if a client is valid.
- *
- * @param client			The client to check.
- *
- * @return					True if the client is valid, false otherwise.
- */
-stock bool IsValidClient(int client)
+public any Native_FPS_SpawnBillboardParticle(Handle plugin, int numParams)
 {
-	if(client <= 0 || client > MaxClients)
+	float pos[3], ang[3];
+	char particle[255], sequence[255];
+	GetNativeArray(1, pos, sizeof(pos));
+	
+	GetNativeString(2, particle, sizeof(particle));
+	int skin = GetNativeCell(3);
+	GetNativeString(4, sequence, sizeof(sequence));
+	float rate = GetNativeCell(5);
+	float duration = GetNativeCell(6);
+	int r = GetNativeCell(7);
+	int g = GetNativeCell(8);
+	int b = GetNativeCell(9);
+	int alpha = GetNativeCell(10);
+	float scale = GetNativeCell(11);
+	
+	Handle ReturnValue = CreateArray(16);
+	
+	for (int client = 1; client <= MaxClients; client++)
 	{
-		return false;
-	}
-	
-	if(!IsClientInGame(client))
-	{
-		return false;
-	}
-
-	return true;
-}
-
-stock Handle getAimTrace(int client, TraceEntityFilter filter)
-{
-	float eyePos[3];
-	float eyeAng[3];
-	GetClientEyePosition(client, eyePos);
-	GetClientEyeAngles(client, eyeAng);
-	
-	Handle trace;
-	
-	trace = TR_TraceRayFilterEx(eyePos, eyeAng, MASK_SHOT, RayType_Infinite, filter);
-	
-	return trace;
-}
-
-public bool Trace_OnlyHitWorld(entity, contentsMask)
-{
-	return entity == 0;
-}
-
-stock int GetIntFromConfigMap(ConfigMap map, char[] path, int defaultValue)
-{
-	char value[255];
-	map.Get(path, value, sizeof(value));
-	
-	if (StrEqual(value, ""))
-	{
-		return defaultValue;
-	}
-	
-	return StringToInt(value);
-}
-
-stock float GetFloatFromConfigMap(ConfigMap map, char[] path, float defaultValue)
-{
-	char value[255];
-	map.Get(path, value, sizeof(value));
-	
-	if (StrEqual(value, ""))
-	{
-		return defaultValue;
-	}
-	
-	return StringToFloat(value);
-}
-
-stock bool GetBoolFromConfigMap(ConfigMap map, char[] path, bool defaultValue)
-{
-	char value[255];
-	map.Get(path, value, sizeof(value));
-	
-	if (StrEqual(value, ""))
-	{
-		return defaultValue;
-	}
-	
-	return (StringToInt(value) != 0);
-}
-
-/**
- * Checks if a file exists.
- *
- * @param path			The file to check.
- *
- * @return					True if it exists, false otherwise.
- */
-stock bool CheckFile(char path[255])
-{
-	bool exists = false;
-	
-	if (FileExists(path))
-	{
-		exists = true;
-	}
-	else
-	{
-		if (FileExists(path, true))
+		if (IsValidClient(client))
 		{
-			exists = true;
+			int FakeParticle = CreateEntityByName("prop_dynamic_override");
+			if (IsValidEntity(FakeParticle))
+			{
+				TeleportEntity(FakeParticle, pos, ang, NULL_VECTOR);
+			
+				char skinChar[16];
+				Format(skinChar, sizeof(skinChar), "%i", skin);
+			
+				DispatchKeyValue(FakeParticle, "skin", skinChar);
+				DispatchKeyValue(FakeParticle, "model", particle);	
+				
+				DispatchKeyValueVector(FakeParticle, "angles", ang);
+				
+				DispatchSpawn(FakeParticle);
+				ActivateEntity(FakeParticle);
+				
+				SetVariantString(sequence);
+				AcceptEntityInput(FakeParticle, "SetAnimation");
+				DispatchKeyValueFloat(FakeParticle, "playbackrate", rate);
+				
+				SetEntityRenderColor(FakeParticle, r, g, b, alpha);
+				SetEntPropFloat(FakeParticle, Prop_Send, "m_flModelScale", scale); 
+				
+				if (duration > 0.0)
+				{
+					CreateTimer(duration, Timer_RemoveEntity, EntIndexToEntRef(FakeParticle), TIMER_FLAG_NO_MAPCHANGE);
+				}
+				
+				//TODO: Use RequestFrame to call FPS_OnFakeParticleCreated on the next frame.
+				
+				ActiveEffects[FakeParticle].Create(FakeParticle, FPS_ParticleType_Billboard, client);
+				
+				PushArrayCell(ReturnValue, EntIndexToEntRef(FakeParticle));
+			}
 		}
 	}
 	
-	return exists;
+	return ReturnValue;
 }
 
-public Action Timer_RemoveEntity(Handle Timer_RemoveEntity, int entityId)
+public any Native_FPS_AttachBillboardParticleToEntity(Handle plugin, int numParams)
 {
-	int entity = EntRefToEntIndex(entityId);
-	if (IsValidEntity(entity) && entity > MaxClients)
+	int entity = GetNativeCell(1);
+	
+	float posOffset[3];
+	char particle[255], sequence[255], point[255];
+	GetNativeString(2, point, sizeof(point));
+	
+	GetNativeString(3, particle, sizeof(particle));
+	int skin = GetNativeCell(4);
+	GetNativeString(5, sequence, sizeof(sequence));
+	float rate = GetNativeCell(6);
+	float duration = GetNativeCell(7);
+	int r = GetNativeCell(8);
+	int g = GetNativeCell(9);
+	int b = GetNativeCell(10);
+	int alpha = GetNativeCell(11);
+	float scale = GetNativeCell(12);
+	
+	GetNativeArray(13, posOffset, sizeof(posOffset));
+	
+	Handle FakeParticles = FPS_SpawnBillboardParticle(OFF_THE_MAP, particle, skin, sequence, rate, duration, r, g, b, alpha, scale);
+	for (int i = 0; i < GetArraySize(FakeParticles); i++)
 	{
-		TeleportEntity(entity, OFF_THE_MAP, NULL_VECTOR, NULL_VECTOR);
-		AcceptEntityInput(entity, "Kill");
-		RemoveEntity(entity);
+		int FakeParticle = EntRefToEntIndex(GetArrayCell(FakeParticles, i));
+		if (IsValidEntity(FakeParticle))
+		{
+			float pos[3];
+			if (HasEntProp(entity, Prop_Data, "m_vecAbsOrigin"))
+			{
+				GetEntPropVector(entity, Prop_Data, "m_vecAbsOrigin", pos);
+			}
+			else if (HasEntProp(entity, Prop_Send, "m_vecOrigin"))
+			{
+				GetEntPropVector(entity, Prop_Send, "m_vecOrigin", pos);
+			}
+			
+			TeleportEntity(FakeParticle, pos, NULL_VECTOR, NULL_VECTOR);
+		
+			SetVariantString("!activator");
+			AcceptEntityInput(FakeParticle, "SetParent", entity, FakeParticle);
+			SetVariantString(point);
+			AcceptEntityInput(FakeParticle, "SetParentAttachmentMaintainOffset", FakeParticle, FakeParticle);
+			DispatchKeyValue(FakeParticle, "targetname", "present");
+			
+			GetEntPropVector(FakeParticle, Prop_Send, "m_vecOrigin", pos);
+			
+			for (int j = 0; j < 3; j++)
+			{
+				pos[j] += posOffset[j];
+			}
+			
+			TeleportEntity(FakeParticle, pos, NULL_VECTOR, NULL_VECTOR);
+		}
 	}
-	return Plugin_Continue;
+	
+	return FakeParticles;
 }
