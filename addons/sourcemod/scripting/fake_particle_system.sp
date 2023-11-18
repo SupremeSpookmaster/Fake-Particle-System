@@ -20,6 +20,7 @@ public Plugin myinfo =
 
 #include <fakeparticles>
 #include <fps_stocks>
+#include <tf2_stocks>
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
@@ -254,6 +255,8 @@ public Native_FPS_SpawnFakeParticle(Handle plugin, int numParams)
 		SetEntityRenderColor(FakeParticle, r, g, b, alpha);
 		SetEntPropFloat(FakeParticle, Prop_Send, "m_flModelScale", scale); 
 		
+		AcceptEntityInput(FakeParticle, "DisableShadow");
+		
 		if (duration > 0.0)
 		{
 			CreateTimer(duration, Timer_RemoveEntity, EntIndexToEntRef(FakeParticle), TIMER_FLAG_NO_MAPCHANGE);
@@ -300,32 +303,65 @@ public Native_FPS_AttachFakeParticleToEntity(Handle plugin, int numParams)
 	{
 		GetEntPropVector(entity, Prop_Send, "m_vecOrigin", pos);
 	}
-	GetClientAbsAngles(entity, ang);
 	
+	if (IsValidClient(entity))
+	{
+		GetClientAbsAngles(entity, ang);
+	}
+	else
+	{
+		GetEntPropVector(entity, Prop_Data, "m_angRotation", ang); 
+	}
+		
 	int FakeParticle = FPS_SpawnFakeParticle(pos, ang, particle, skin, sequence, rate, duration, r, g, b, alpha, scale);
 	if (IsValidEntity(FakeParticle))
 	{
-		SetVariantString("!activator");
-		AcceptEntityInput(FakeParticle, "SetParent", entity, FakeParticle);
-		SetVariantString(point);
-		AcceptEntityInput(FakeParticle, "SetParentAttachmentMaintainOffset", FakeParticle, FakeParticle);
-		DispatchKeyValue(FakeParticle, "targetname", "present");
+		int info = ParentInfoTarget(entity, point);
 		
+		SetVariantString("!activator");
+		AcceptEntityInput(FakeParticle, "SetParent", info, FakeParticle);
+		DispatchKeyValue(FakeParticle, "targetname", "present");
+		SetEntPropEnt(FakeParticle, Prop_Send, "m_hOwnerEntity", entity);
+			
 		GetEntPropVector(FakeParticle, Prop_Send, "m_vecOrigin", pos);
 		GetEntPropVector(FakeParticle, Prop_Send, "m_angRotation", ang);
-		
+			
 		for (int i = 0; i < 3; i++)
 		{
 			pos[i] += posOffset[i];
 			ang[i] += angOffset[i];
 		}
-		
+			
 		TeleportEntity(FakeParticle, pos, ang, NULL_VECTOR);
-		
+			
 		DispatchSpawn(FakeParticle);
 		ActivateEntity(FakeParticle);
 		
 		return FakeParticle;
+	}
+	
+	return -1;
+}
+
+int ParentInfoTarget(int entity, char point[255])
+{
+	int info = CreateEntityByName("info_target");
+	if (IsValidEntity(info))
+	{
+		float pos[3];
+		GetEntPropVector(entity, Prop_Send, "m_vecOrigin", pos);
+		TeleportEntity(info, pos, NULL_VECTOR, NULL_VECTOR);
+		
+		SetVariantString("!activator");
+		AcceptEntityInput(info, "SetParent", entity, info);
+		SetVariantString(point);
+		AcceptEntityInput(info, "SetParentAttachmentMaintainOffset", info, info);
+		DispatchKeyValue(info, "targetname", "dummycam"); 
+		DispatchSpawn(info);
+		ActivateEntity(info);
+		AcceptEntityInput(info, "Start");
+		
+		return info;
 	}
 	
 	return -1;
@@ -347,6 +383,9 @@ public any Native_FPS_SpawnBillboardParticle(Handle plugin, int numParams)
 	int b = GetNativeCell(9);
 	int alpha = GetNativeCell(10);
 	float scale = GetNativeCell(11);
+	bool xRot = GetNativeCell(12);
+	bool yRot = GetNativeCell(13);
+	bool zRot = GetNativeCell(14);
 	
 	Handle ReturnValue = CreateArray(16);
 	
@@ -377,6 +416,8 @@ public any Native_FPS_SpawnBillboardParticle(Handle plugin, int numParams)
 				SetEntityRenderColor(FakeParticle, r, g, b, alpha);
 				SetEntPropFloat(FakeParticle, Prop_Send, "m_flModelScale", scale); 
 				
+				AcceptEntityInput(FakeParticle, "DisableShadow");
+				
 				if (duration > 0.0)
 				{
 					CreateTimer(duration, Timer_RemoveEntity, EntIndexToEntRef(FakeParticle), TIMER_FLAG_NO_MAPCHANGE);
@@ -384,7 +425,7 @@ public any Native_FPS_SpawnBillboardParticle(Handle plugin, int numParams)
 				
 				//TODO: Use RequestFrame to call FPS_OnFakeParticleCreated on the next frame.
 				
-				ActiveEffects[FakeParticle].Create(FakeParticle, FPS_ParticleType_Billboard, client);
+				ActiveEffects[FakeParticle].Create(FakeParticle, FPS_ParticleType_Billboard, client, xRot, yRot, zRot);
 				
 				PushArrayCell(ReturnValue, EntIndexToEntRef(FakeParticle));
 			}
@@ -412,10 +453,13 @@ public any Native_FPS_AttachBillboardParticleToEntity(Handle plugin, int numPara
 	int b = GetNativeCell(10);
 	int alpha = GetNativeCell(11);
 	float scale = GetNativeCell(12);
+	bool xRot = GetNativeCell(13);
+	bool yRot = GetNativeCell(14);
+	bool zRot = GetNativeCell(15);
 	
 	GetNativeArray(13, posOffset, sizeof(posOffset));
 	
-	Handle FakeParticles = FPS_SpawnBillboardParticle(OFF_THE_MAP, particle, skin, sequence, rate, duration, r, g, b, alpha, scale);
+	Handle FakeParticles = FPS_SpawnBillboardParticle(OFF_THE_MAP, particle, skin, sequence, rate, duration, r, g, b, alpha, scale, xRot, yRot, zRot);
 	for (int i = 0; i < GetArraySize(FakeParticles); i++)
 	{
 		int FakeParticle = EntRefToEntIndex(GetArrayCell(FakeParticles, i));
@@ -433,11 +477,12 @@ public any Native_FPS_AttachBillboardParticleToEntity(Handle plugin, int numPara
 			
 			TeleportEntity(FakeParticle, pos, NULL_VECTOR, NULL_VECTOR);
 		
+			int info = ParentInfoTarget(entity, point);
+		
 			SetVariantString("!activator");
-			AcceptEntityInput(FakeParticle, "SetParent", entity, FakeParticle);
-			SetVariantString(point);
-			AcceptEntityInput(FakeParticle, "SetParentAttachmentMaintainOffset", FakeParticle, FakeParticle);
+			AcceptEntityInput(FakeParticle, "SetParent", info, FakeParticle);
 			DispatchKeyValue(FakeParticle, "targetname", "present");
+			SetEntPropEnt(FakeParticle, Prop_Send, "m_hOwnerEntity", entity);
 			
 			GetEntPropVector(FakeParticle, Prop_Send, "m_vecOrigin", pos);
 			
