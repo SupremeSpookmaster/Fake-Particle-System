@@ -342,6 +342,10 @@ public Native_FPS_AttachFakeParticleToEntity(Handle plugin, int numParams)
 		DispatchSpawn(FakeParticle);
 		ActivateEntity(FakeParticle);
 		
+		SetVariantString(sequence);
+		AcceptEntityInput(FakeParticle, "SetAnimation");
+		DispatchKeyValueFloat(FakeParticle, "playbackrate", rate);
+		
 		return FakeParticle;
 	}
 	
