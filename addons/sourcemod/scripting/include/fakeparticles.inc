@@ -126,7 +126,7 @@ public Action FPE_Transmit(int entity, int client)
 }
 
 /**
- * Spawns a model at the given coordinates. Intended to be used to spawn fake particle effects.
+ * Spawns a prop_dynamic at the given coordinates. Intended to be used to spawn fake particle effects.
  *
  * @param pos		The position at which to spawn the fake particle effect.
  * @param ang		The angles with which the fake particle effect should be spawned.
@@ -170,9 +170,8 @@ native int FPS_SpawnFakeParticle(float pos[3], float ang[3], char particle[255],
 native int FPS_AttachFakeParticleToEntity(int entity, char point[255], char particle[255], int skin, char sequence[255] = "ref", float rate = 1.0, float duration = 0.0, int r = 255, int g = 255, int b = 255, int alpha = 255, float scale = 1.0, float posOffset[3] = NULL_VECTOR, float angOffset[3] = NULL_VECTOR);
 
 /**
- * Spawns a unique model at the given coordinates for every client, which faces its target client at all times. It's like a sprite, but more customizable.
- * Example: if you've ever played Super Mario 64, this does what the trees in the starting area do, for *every* client.
- * As such, billboard particles are VERY expensive on the entity limit and should be used sparingly.
+ * Spawns a unique model at the given coordinates which simulates an `env_sprite`, with added customization. 
+ * Billboard particles are VERY expensive and must be used sparingly, as they achieve their `env_sprite` simulation by spawning a unique model for every client.
  *
  * @param pos		The position at which to spawn the fake particle effect.
  * @param particle	The model name of the fake particle effect.

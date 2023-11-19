@@ -255,7 +255,12 @@ public Native_FPS_SpawnFakeParticle(Handle plugin, int numParams)
 		SetEntityRenderColor(FakeParticle, r, g, b, alpha);
 		SetEntPropFloat(FakeParticle, Prop_Send, "m_flModelScale", scale); 
 		
-		AcceptEntityInput(FakeParticle, "DisableShadow");
+		//AcceptEntityInput(FakeParticle, "DisableShadow");
+		DispatchKeyValue(FakeParticle, "shadowcastdist", "0");
+        DispatchKeyValue(FakeParticle, "disablereceiveshadows", "1");
+        DispatchKeyValue(FakeParticle, "disableshadows", "1");
+        DispatchKeyValue(FakeParticle, "disableshadowdepth", "1");
+        DispatchKeyValue(FakeParticle, "disableselfshadowing", "1"); 
 		
 		if (duration > 0.0)
 		{
