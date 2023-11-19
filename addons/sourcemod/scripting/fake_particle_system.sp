@@ -501,6 +501,10 @@ public any Native_FPS_AttachBillboardParticleToEntity(Handle plugin, int numPara
 			}
 			
 			TeleportEntity(FakeParticle, pos, NULL_VECTOR, NULL_VECTOR);
+			
+			SetVariantString(sequence);
+			AcceptEntityInput(FakeParticle, "SetAnimation");
+			DispatchKeyValueFloat(FakeParticle, "playbackrate", rate);
 		}
 	}
 	
