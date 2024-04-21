@@ -19,23 +19,23 @@ public Plugin myinfo =
 };
 
 #include <fakeparticles>
-#include <fps_stocks>
 #include <tf2_stocks>
+#include <queue>
+#include <cfgmap>
+#include <sdkhooks>
+
+float OFF_THE_MAP[3] = {1182792704.0, 1182792704.0, -964690944.0};
+
+#define MODEL_DEFAULT	"models/props_c17/cashregister01a.mdl"
+
+#include "fake_particles/particle_simulation.sp"
+#include "fake_particles/particle_body.sp"
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
 	FPS_MakeNatives();
 	return APLRes_Success;
 }
-
-////////////////////////////////////////////////////////////////////////
-//		TODO: Various ideas for features:
-//
-//		FPS_OnFakeParticleCreated(char particle[255], float pos[3], float ang[3], float scale, int r, int g, int b, int alpha, int skin): 
-//				- Called when a FPE is created.
-//		FPS_OnFakeParticleRemoved(char particle[255], float pos[3], float ang[3], float scale, int r, int g, int b, int alpha, int skin):
-//				- Called when a FPE is removed.
-////////////////////////////////////////////////////////////////////////
 
 public void OnPluginStart()
 {
@@ -52,6 +52,9 @@ public void FPS_MakeNatives()
 	CreateNative("FPS_AttachFakeParticleToEntity", Native_FPS_AttachFakeParticleToEntity);
 	CreateNative("FPS_SpawnBillboardParticle", Native_FPS_SpawnBillboardParticle);
 	CreateNative("FPS_AttachBillboardParticleToEntity", Native_FPS_AttachBillboardParticleToEntity);
+	
+	PSim_MakeNatives();
+	PBod_MakeNatives();
 }
 
 public void FPS_MakeForwards()
@@ -80,6 +83,8 @@ public OnMapStart()
 	
 	PrecacheSound(SND_ADMINCOMMAND);
 	PrecacheSound(SND_ADMINCOMMAND_ERROR);
+	
+	PrecacheModel(MODEL_DEFAULT);
 }
 
 public void FPS_LoadFakes()
@@ -210,6 +215,20 @@ public void OnEntityDestroyed(int entity)
 	if (entity >= 0 && entity < 2049)
 	{
 		ActiveEffects[entity].Delete();
+		
+		ParticleSimulation PSim = view_as<ParticleSimulation>(entity);
+		if (PSim.Exists)
+		{
+			PSim.Destroy();
+			PSim.Exists = false;
+		}
+		
+		ParticleBody PBod = view_as<ParticleBody>(entity);
+		if (PBod.Exists)
+		{
+			PBod.Destroy();
+			PBod.Exists = false;
+		}
 	}
 }
 
@@ -257,10 +276,10 @@ public Native_FPS_SpawnFakeParticle(Handle plugin, int numParams)
 		
 		//AcceptEntityInput(FakeParticle, "DisableShadow");
 		DispatchKeyValue(FakeParticle, "shadowcastdist", "0");
-        DispatchKeyValue(FakeParticle, "disablereceiveshadows", "1");
-        DispatchKeyValue(FakeParticle, "disableshadows", "1");
-        DispatchKeyValue(FakeParticle, "disableshadowdepth", "1");
-        DispatchKeyValue(FakeParticle, "disableselfshadowing", "1"); 
+		DispatchKeyValue(FakeParticle, "disablereceiveshadows", "1");
+		DispatchKeyValue(FakeParticle, "disableshadows", "1");
+		DispatchKeyValue(FakeParticle, "disableshadowdepth", "1");
+		DispatchKeyValue(FakeParticle, "disableselfshadowing", "1"); 
 		
 		if (duration > 0.0)
 		{
@@ -311,6 +330,7 @@ public Native_FPS_AttachFakeParticleToEntity(Handle plugin, int numParams)
 	
 	if (IsValidClient(entity))
 	{
+		GetClientAbsOrigin(entity, pos);
 		GetClientAbsAngles(entity, ang);
 	}
 	else
@@ -331,13 +351,15 @@ public Native_FPS_AttachFakeParticleToEntity(Handle plugin, int numParams)
 		GetEntPropVector(FakeParticle, Prop_Send, "m_vecOrigin", pos);
 		GetEntPropVector(FakeParticle, Prop_Send, "m_angRotation", ang);
 			
-		for (int i = 0; i < 3; i++)
+		//TODO: This breaks them in Chaos Fortress for some reason????????????????????
+		//Need to find a fix and publish the fixed version to GitHub, then add the FPS to prerequisites.
+		/*for (int i = 0; i < 3; i++)
 		{
 			pos[i] += posOffset[i];
 			ang[i] += angOffset[i];
 		}
 			
-		TeleportEntity(FakeParticle, pos, ang, NULL_VECTOR);
+		TeleportEntity(FakeParticle, pos, ang, NULL_VECTOR);*/
 			
 		DispatchSpawn(FakeParticle);
 		ActivateEntity(FakeParticle);
@@ -509,4 +531,146 @@ public any Native_FPS_AttachBillboardParticleToEntity(Handle plugin, int numPara
 	}
 	
 	return FakeParticles;
+}
+
+//STOCKS BELOW, too lazy to make a separate .inc file:
+
+stock Handle GetPluginHandle(char plugin[255])
+{
+	char buffer[PLATFORM_MAX_PATH];
+	Handle iter = GetPluginIterator();
+	while (MorePlugins(iter))
+	{
+		Handle plug = ReadPlugin(iter);
+		GetPluginFilename(plug, buffer, sizeof(buffer));
+		
+		int highest = -1;
+		for(int i = strlen(buffer)-1; i > 0; i--)
+		{
+			if(buffer[i] == '/' || buffer[i] == '\\')
+			{
+				highest = i;
+				break;
+			}
+		}
+		
+		ReplaceString(buffer, sizeof(buffer), ".smx", "");
+		
+		if(StrEqual(buffer[highest+1], plugin))
+		{
+			delete iter;
+			return plug;
+		}
+	}
+	
+	delete iter;
+	return INVALID_HANDLE;
+}
+
+stock int SpawnParticle(float origin[3], char particle[255], float duration = 0.0)
+{
+	int Effect = CreateEntityByName("info_particle_system");
+	if (IsValidEdict(Effect))
+	{
+		TeleportEntity(Effect, origin, NULL_VECTOR, NULL_VECTOR);
+		DispatchKeyValue(Effect, "effect_name", particle);
+		SetVariantString("!activator");
+		DispatchKeyValue(Effect, "targetname", "present");
+		DispatchSpawn(Effect);
+		ActivateEntity(Effect);
+		AcceptEntityInput(Effect, "Start");
+		
+		if (duration > 0.0)
+		{
+			CreateTimer(duration, Timer_RemoveEntity, EntIndexToEntRef(Effect), TIMER_FLAG_NO_MAPCHANGE);
+		}
+		
+		return Effect;
+	}
+	
+	return -1;
+}
+
+stock bool IsValidClient(int client)
+{
+	if(client <= 0 || client > MaxClients)
+	{
+		return false;
+	}
+	
+	if(!IsClientInGame(client))
+	{
+		return false;
+	}
+
+	return true;
+}
+
+public Action Timer_RemoveEntity(Handle removeEnt, int entityId)
+{
+	int entity = EntRefToEntIndex(entityId);
+	if (IsValidEntity(entity) && entity > MaxClients)
+	{
+		TeleportEntity(entity, OFF_THE_MAP, NULL_VECTOR, NULL_VECTOR);
+		AcceptEntityInput(entity, "Kill");
+		RemoveEntity(entity);
+	}
+	return Plugin_Continue;
+}
+
+stock bool CheckFile(char path[255])
+{
+	bool exists = false;
+	
+	if (FileExists(path))
+	{
+		exists = true;
+	}
+	else
+	{
+		if (FileExists(path, true))
+		{
+			exists = true;
+		}
+	}
+	
+	return exists;
+}
+
+stock void AddInFrontOf(float fVecOrigin[3], float fVecAngle[3], float fUnits, float fOutPut[3])
+{
+	float fVecView[3]; GetViewVector(fVecAngle, fVecView);
+	
+	fOutPut[0] = fVecView[0] * fUnits + fVecOrigin[0];
+	fOutPut[1] = fVecView[1] * fUnits + fVecOrigin[1];
+	fOutPut[2] = fVecView[2] * fUnits + fVecOrigin[2];
+}
+
+stock bool IsPlayerInvis(int client)
+{
+	if (!IsValidClient(client))
+		return false;
+		
+	//Check for empty model:
+	char model[255];
+	GetEntPropString(client, Prop_Data, "m_ModelName", model, sizeof(model));
+	
+	if (StrContains(model, "empty.mdl") != -1)
+		return true;
+		
+	//Check for zero alpha:
+	int r, g, b, a;
+	GetEntityRenderColor(client, r, g, b, a);
+	if (a == 0)
+		return true;
+	
+	//Check for RENDERFX_NONE and TF2's invisibility conditions:
+	return GetEntityRenderMode(client) == RENDER_NONE || TF2_IsPlayerInCondition(client, TFCond_Cloaked) || TF2_IsPlayerInCondition(client, TFCond_Stealthed) || TF2_IsPlayerInCondition(client, TFCond_StealthedUserBuffFade);
+}
+
+stock void GetViewVector(float fVecAngle[3], float fOutPut[3])
+{
+	fOutPut[0] = Cosine(fVecAngle[1] / (180 / FLOAT_PI));
+	fOutPut[1] = Sine(fVecAngle[1] / (180 / FLOAT_PI));
+	fOutPut[2] = -Sine(fVecAngle[0] / (180 / FLOAT_PI));
 }

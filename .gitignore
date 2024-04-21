@@ -16,6 +16,8 @@
 
 #Source Code
 !fake_particle_system.sp
+!particle_body.sp
+!particle_simulation.sp
 
 #Include Files
 !fakeparticles.inc
