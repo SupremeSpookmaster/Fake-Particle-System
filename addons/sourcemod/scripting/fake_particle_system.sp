@@ -26,6 +26,8 @@ public Plugin myinfo =
 
 float OFF_THE_MAP[3] = {1182792704.0, 1182792704.0, -964690944.0};
 
+int FPS_InfoTarget[2049] = { -1, ... };
+
 #define MODEL_DEFAULT	"models/props_c17/cashregister01a.mdl"
 
 #include "fake_particles/particle_simulation.sp"
@@ -229,6 +231,12 @@ public void OnEntityDestroyed(int entity)
 			PBod.Destroy();
 			PBod.Exists = false;
 		}
+		
+		int info = EntRefToEntIndex(FPS_InfoTarget[entity]);
+		if (IsValidEntity(info))
+			RemoveEntity(info);
+			
+		FPS_InfoTarget[entity] = -1;
 	}
 }
 
@@ -347,6 +355,8 @@ public Native_FPS_AttachFakeParticleToEntity(Handle plugin, int numParams)
 		AcceptEntityInput(FakeParticle, "SetParent", info, FakeParticle);
 		DispatchKeyValue(FakeParticle, "targetname", "present");
 		SetEntPropEnt(FakeParticle, Prop_Send, "m_hOwnerEntity", entity);
+		
+		FPS_InfoTarget[FakeParticle] = EntIndexToEntRef(info);
 			
 		GetEntPropVector(FakeParticle, Prop_Send, "m_vecOrigin", pos);
 		GetEntPropVector(FakeParticle, Prop_Send, "m_angRotation", ang);
@@ -516,6 +526,8 @@ public any Native_FPS_AttachBillboardParticleToEntity(Handle plugin, int numPara
 			SetEntPropEnt(FakeParticle, Prop_Send, "m_hOwnerEntity", entity);
 			
 			GetEntPropVector(FakeParticle, Prop_Send, "m_vecOrigin", pos);
+			
+			FPS_InfoTarget[FakeParticle] = EntIndexToEntRef(info);
 			
 			for (int j = 0; j < 3; j++)
 			{
