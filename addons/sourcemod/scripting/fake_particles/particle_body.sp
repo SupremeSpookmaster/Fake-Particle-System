@@ -123,7 +123,7 @@ public void PBod_InternalLogic(int ref)
 		if (FadeOutInitiated[PBod.Index])
 			FullyFaded = PBod.Fade_Rate <= 0.0;
 			
-		if (!FullyFaded)
+		if (!FullyFaded && PBod.Entities != null)
 		{
 			for (int i = 0; i < GetArraySize(PBod.Entities); i++)
 			{
