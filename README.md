@@ -10,3 +10,4 @@ TODO: Post gifs of the fake particle system in action.
 # *KNOWN LIMITATIONS/BUGS*
 Be forewarned that this plugin is not perfect; I did what I could to get it as close to perfect as possible, but there are certain kinks with TF2's version of the Source engine which cannot be worked around.
 - If an FPE is parented to a player, that FPE rotates automatically when that player moves their mouse. This rotation is only visible to the client the FPE is parented to, and the FPE will appear completely normal to all other players.
+- Fake Particle Simulations can be extremely expensive on the entity limit, so they should be used with caution.
