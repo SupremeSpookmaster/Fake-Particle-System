@@ -598,14 +598,15 @@ public int Native_AddTrailToPBod(Handle plugin, int numParams)
 		
 		DispatchKeyValueInt(trail, "renderfx", renderfx);
 		
-		DispatchSpawn(trail);
-		ActivateEntity(trail);
-		
 		Sprite_Alpha[trail] = alpha;
 		
 		SetEntPropFloat(trail, Prop_Send, "m_flTextureRes", 0.05); 
 		
 		PBod.AddEntity(trail, lifespan, logic, pluginName);
+
+		DispatchSpawn(trail);
+		ActivateEntity(trail);
+
 		return trail;
 	}
 	
